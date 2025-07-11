@@ -10,6 +10,7 @@ interface TasksViewProps {
   selectedCategory: string;
   selectedPriority: string;
   selectedStatus: string;
+  onAddTask: (task: Omit<Task, 'id'>) => void;
   onPriorityChange: (priority: string) => void;
   onStatusChange: (status: string) => void;
   onUpdateTask: (id: string, updates: Partial<Task>) => void;
@@ -30,6 +31,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [animatingTasks, setAnimatingTasks] = useState<Set<string>>(new Set());
+  const [hoveredTask, setHoveredTask] = useState<string | null>(null);
   
   // Section collapse/expand state
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
@@ -176,10 +178,10 @@ export const TasksView: React.FC<TasksViewProps> = ({
         </div>
         <div className="bg-white p-4 rounded-lg border border-gray-200">
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-sm">⚠️</span>
-            <span className="text-sm font-medium text-gray-600">Overdue</span>
+            <span className="text-sm">🔥</span>
+            <span className="text-sm font-medium text-gray-600">Needs Attention</span>
           </div>
-          <p className="text-2xl font-bold text-red-600">{counts.overdue}</p>
+          <p className="text-2xl font-bold text-orange-600">{counts.overdue}</p>
         </div>
       </div>
 
@@ -244,7 +246,9 @@ export const TasksView: React.FC<TasksViewProps> = ({
                   {sections.pending.map((task) => (
                     <div
                       key={task.id}
-                      className={`task-card-wrapper ${animatingTasks.has(task.id) ? 'animating' : ''}`}
+                      className={`task-card-wrapper ${animatingTasks.has(task.id) ? 'animating' : ''} ${hoveredTask === task.id ? 'hover-preview' : ''}`}
+                      onMouseEnter={() => setHoveredTask(task.id)}
+                      onMouseLeave={() => setHoveredTask(null)}
                     >
                       <TaskCard
                         task={task}
@@ -252,6 +256,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
                         onEdit={handleEditTask}
                         onDelete={handleDeleteTask}
                         showActions={true}
+                        isHovered={hoveredTask === task.id}
                       />
                     </div>
                   ))}
@@ -260,12 +265,12 @@ export const TasksView: React.FC<TasksViewProps> = ({
             )}
           </div>
 
-          {/* Overdue Container Card - Always Show */}
+          {/* Needs Attention Container Card - Improved Language */}
           <div className="container-card overdue-container">
             <div className="container-header" onClick={() => toggleSectionCollapse('overdue')}>
               <div className="container-header-left">
-                <span className="container-emoji">⚠️</span>
-                <h3 className="container-title">Overdue ({sections.overdue.length})</h3>
+                <span className="container-emoji">🔥</span>
+                <h3 className="container-title">Needs Attention ({sections.overdue.length})</h3>
               </div>
               <button className="collapse-toggle" type="button">
                 {collapsedSections.overdue ? (
@@ -281,7 +286,9 @@ export const TasksView: React.FC<TasksViewProps> = ({
                   {sections.overdue.map((task) => (
                     <div
                       key={task.id}
-                      className={`task-card-wrapper ${animatingTasks.has(task.id) ? 'animating' : ''}`}
+                      className={`task-card-wrapper ${animatingTasks.has(task.id) ? 'animating' : ''} ${hoveredTask === task.id ? 'hover-preview' : ''}`}
+                      onMouseEnter={() => setHoveredTask(task.id)}
+                      onMouseLeave={() => setHoveredTask(null)}
                     >
                       <TaskCard
                         task={task}
@@ -289,6 +296,9 @@ export const TasksView: React.FC<TasksViewProps> = ({
                         onEdit={handleEditTask}
                         onDelete={handleDeleteTask}
                         showActions={true}
+                        isHovered={hoveredTask === task.id}
+                        isOverdue={true}
+                        showUrgentStyling={true}
                       />
                     </div>
                   ))}
@@ -318,7 +328,9 @@ export const TasksView: React.FC<TasksViewProps> = ({
                   {sections.completed.map((task) => (
                     <div
                       key={task.id}
-                      className={`task-card-wrapper ${animatingTasks.has(task.id) ? 'animating' : ''}`}
+                      className={`task-card-wrapper ${animatingTasks.has(task.id) ? 'animating' : ''} ${hoveredTask === task.id ? 'hover-preview' : ''}`}
+                      onMouseEnter={() => setHoveredTask(task.id)}
+                      onMouseLeave={() => setHoveredTask(null)}
                     >
                       <TaskCard
                         task={task}
@@ -326,6 +338,8 @@ export const TasksView: React.FC<TasksViewProps> = ({
                         onEdit={handleEditTask}
                         onDelete={handleDeleteTask}
                         showActions={true}
+                        isHovered={hoveredTask === task.id}
+                        isCompleted={true}
                       />
                     </div>
                   ))}
@@ -351,75 +365,89 @@ export const TasksView: React.FC<TasksViewProps> = ({
         .card-container-sections {
           display: flex;
           flex-direction: column;
-          gap: 20px;
+          gap: 24px;
           padding: 20px 0;
         }
 
-        /* Container Cards - Consistent Neutral Styling */
+        /* Container Cards - All White Background */
         .container-card {
           background: #ffffff;
           border: 1px solid #e5e7eb;
-          border-radius: 12px;
-          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
-          transition: all 0.2s ease;
+          border-radius: 16px;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+          transition: all 0.3s ease;
           overflow: hidden;
         }
 
         .container-card:hover {
-          box-shadow: 0 4px 8px rgba(0, 0, 0, 0.06);
+          box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+          transform: translateY(-1px);
         }
 
-        /* All containers use same neutral background */
+        /* All containers use consistent white background */
         .pending-container,
         .overdue-container,
         .completed-container {
-          background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+          background: #ffffff;
         }
 
-        /* Enhanced Container Headers with Collapse/Expand */
+        /* Completed Section Subtle Styling */
+        .completed-container {
+          opacity: 0.95;
+        }
+
+        .completed-container .task-card {
+          opacity: 0.92;
+        }
+
+        .completed-container .task-card:hover {
+          opacity: 1;
+        }
+
+        /* Enhanced Container Headers */
         .container-header {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          padding: 16px 20px;
-          border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+          padding: 18px 24px;
+          border-bottom: 1px solid rgba(0, 0, 0, 0.06);
           cursor: pointer;
           transition: all 0.2s ease;
           user-select: none;
         }
 
         .container-header:hover {
-          background: rgba(255, 255, 255, 0.5);
+          background: rgba(255, 255, 255, 0.6);
         }
 
         .container-header-left {
           display: flex;
           align-items: center;
-          gap: 8px;
+          gap: 10px;
         }
 
         .container-emoji {
-          font-size: 16px;
+          font-size: 18px;
           line-height: 1;
         }
 
         .container-title {
-          font-size: 16px;
+          font-size: 17px;
           font-weight: 600;
           color: #1f2937;
           margin: 0;
-          line-height: 1;
+          line-height: 1.2;
         }
 
         .collapse-toggle {
           display: flex;
           align-items: center;
           justify-content: center;
-          width: 28px;
-          height: 28px;
+          width: 32px;
+          height: 32px;
           border: none;
           background: transparent;
-          border-radius: 6px;
+          border-radius: 8px;
           color: #6b7280;
           cursor: pointer;
           transition: all 0.2s ease;
@@ -427,96 +455,159 @@ export const TasksView: React.FC<TasksViewProps> = ({
         }
 
         .collapse-toggle:hover {
-          background: rgba(0, 0, 0, 0.05);
+          background: rgba(0, 0, 0, 0.06);
           color: #374151;
         }
 
-        /* Container Content - Proper Padding */
+        /* Container Content - Enhanced Spacing */
         .container-content {
-          padding: 20px;
+          padding: 24px;
         }
 
-        /* Task Grid Inside Containers */
+        /* Consistent Task Grid - Fixed Card Sizes */
         .tasks-grid-inside-container {
           display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-          gap: 20px;
+          grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+          gap: 16px;
         }
 
-        /* Task Card Wrappers - Maintain Existing Animations */
+        /* Responsive Grid - Consistent Sizing */
+        @media (min-width: 640px) {
+          .tasks-grid-inside-container {
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 20px;
+          }
+        }
+
+        @media (min-width: 1200px) {
+          .tasks-grid-inside-container {
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 24px;
+          }
+        }
+
+        /* Task Card Wrapper - Enhanced Animations */
         .task-card-wrapper {
           transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-          transform-origin: center;
-          position: relative;
         }
 
         .task-card-wrapper.animating {
-          transform: scale(0.95);
+          transform: scale(0.98);
           opacity: 0.7;
-          filter: blur(1px);
         }
 
-        /* Mobile Responsive */
-        @media (max-width: 768px) {
-          .card-container-sections {
-            gap: 16px;
-          }
-
-          .container-header {
-            padding: 14px 16px;
-          }
-
-          .container-title {
-            font-size: 15px;
-          }
-
-          .container-emoji {
-            font-size: 15px;
-          }
-
-          .container-content {
-            padding: 16px;
-          }
-
-          .tasks-grid-inside-container {
-            grid-template-columns: 1fr;
-            gap: 16px;
-          }
-
-          .collapse-toggle {
-            width: 28px;
-            height: 28px;
-          }
+        /* Hover Preview Effect - Similar to TodayView */
+        .task-card-wrapper.hover-preview .task-card {
+          background: #f9fafb;
+          transition: background-color 0.2s ease;
         }
 
-        @media (min-width: 1400px) {
-          .tasks-grid-inside-container {
-            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-            gap: 28px;
-          }
-
-          .container-header {
-            padding: 18px 24px;
-          }
-
-          .container-content {
-            padding: 24px;
-          }
+        .task-card-wrapper.hover-preview .task-name {
+          color: #6b7280;
+          text-decoration: line-through;
+          text-decoration-color: #9ca3af;
+          transition: all 0.2s ease;
         }
 
-        /* Smooth Animations */
+        .task-card-wrapper.hover-preview .task-description {
+          color: #6b7280;
+          text-decoration: line-through;
+          text-decoration-color: #9ca3af;
+          transition: all 0.2s ease;
+        }
+
+        /* Completed tasks reverse effect on hover */
+        .task-card-wrapper.hover-preview .task-card.completed-task .task-name {
+          color: #1f2937;
+          text-decoration: none;
+        }
+
+        .task-card-wrapper.hover-preview .task-card.completed-task .task-description {
+          color: #6b7280;
+          text-decoration: none;
+        }
+
+        /* Enhanced Card Interactions */
+        .container-card .task-card {
+          background: #ffffff;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+          border: 1px solid #f1f5f9;
+          transition: all 0.3s ease;
+          border-radius: 12px;
+          padding: 20px;
+        }
+
+        .container-card .task-card:hover {
+          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+          transform: translateY(-2px);
+          border-color: #e2e8f0;
+        }
+
+        /* TaskCard Content Styling */
+        .task-card .task-name {
+          font-size: 16px;
+          font-weight: 600;
+          color: #1f2937;
+          margin-bottom: 4px;
+          transition: all 0.2s ease;
+        }
+
+        .task-card .task-description {
+          font-size: 14px;
+          color: #6b7280;
+          margin-bottom: 8px;
+          transition: all 0.2s ease;
+        }
+
+        .task-card .task-category {
+          font-size: 12px;
+          color: #9ca3af;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+          font-weight: 500;
+        }
+
+        /* Overdue tasks - Only red due date, white card */
+        .task-card.overdue-task {
+          background: #ffffff;
+          border: 1px solid #f1f5f9;
+        }
+
+        .task-card.overdue-task .task-due-date {
+          color: #dc2626;
+          font-weight: 600;
+        }
+
+        /* Completed tasks styling */
+        .task-card.completed-task .task-name {
+          color: #6b7280;
+          text-decoration: line-through;
+          text-decoration-color: #9ca3af;
+        }
+
+        .task-card.completed-task .task-description {
+          color: #9ca3af;
+          text-decoration: line-through;
+          text-decoration-color: #d1d5db;
+        }
+
+        .task-card.completed-task {
+          opacity: 0.9;
+        }
+
+        /* Enhanced Animation Sequences */
         .container-card {
-          animation: container-fade-in 0.4s ease-out;
+          animation: container-fade-in 0.6s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
-        .tasks-grid-inside-container {
+        .container-content {
           animation: content-fade-in 0.5s ease-out 0.1s both;
         }
 
         @keyframes container-fade-in {
           from {
             opacity: 0;
-            transform: translateY(-10px);
+            transform: translateY(-12px);
           }
           to {
             opacity: 1;
@@ -527,7 +618,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
         @keyframes content-fade-in {
           from {
             opacity: 0;
-            transform: translateY(10px);
+            transform: translateY(8px);
           }
           to {
             opacity: 1;
@@ -537,21 +628,10 @@ export const TasksView: React.FC<TasksViewProps> = ({
 
         /* Subtle Hover Effects for Container Cards */
         .container-card:hover .container-header {
-          background: rgba(255, 255, 255, 0.5);
+          background: rgba(255, 255, 255, 0.6);
         }
 
         /* Visual Hierarchy - Task Cards Remain Prominent */
-        .container-card .task-card {
-          background: #ffffff;
-          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-        }
-
-        .container-card .task-card:hover {
-          box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
-          transform: translateY(-2px);
-        }
-
-        /* Ensure Proper Visual Nesting */
         .container-card {
           position: relative;
           z-index: 1;
@@ -562,17 +642,19 @@ export const TasksView: React.FC<TasksViewProps> = ({
           z-index: 2;
         }
 
-        /* Completed Section Subtle Styling */
-        .completed-container {
-          opacity: 0.95;
-        }
-
-        .completed-container .task-card {
-          opacity: 0.9;
-        }
-
-        .completed-container .task-card:hover {
-          opacity: 1;
+        /* Mobile Improvements */
+        @media (max-width: 640px) {
+          .container-content {
+            padding: 20px 16px;
+          }
+          
+          .container-header {
+            padding: 16px 20px;
+          }
+          
+          .tasks-grid-inside-container {
+            gap: 12px;
+          }
         }
       `}</style>
     </div>
