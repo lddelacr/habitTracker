@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Calendar, Edit3, Trash2, CheckCircle2, Clock, AlertTriangle, Circle } from 'lucide-react';
 import { Task } from '../types/task';
 import { getCategoryById } from '../utils/categoryUtils';
@@ -10,6 +10,7 @@ interface TaskCardProps {
   onEdit?: (task: Task) => void;
   onDelete?: (id: string) => void;
   showActions?: boolean;
+  showUrgentStyling?: boolean;
 }
 
 export const TaskCard: React.FC<TaskCardProps> = ({
@@ -17,14 +18,15 @@ export const TaskCard: React.FC<TaskCardProps> = ({
   onToggleCompletion,
   onEdit,
   onDelete,
-  showActions = false
+  showActions = false,
+  showUrgentStyling = false
 }) => {
+  const [isHovered, setIsHovered] = useState(false);
   const category = getCategoryById(task.category);
   const categoryName = category?.name || 'Uncategorized';
   
   const today = getTodayString();
   const isOverdue = task.status !== 'completed' && task.dueDate < today;
-  const isDueToday = task.dueDate === today;
   const isCompleted = task.status === 'completed';
 
   const formatDueDateTime = (dateString: string, timeString: string) => {
@@ -76,9 +78,23 @@ export const TaskCard: React.FC<TaskCardProps> = ({
     }
   };
 
+  // Helper function to get lighter background color for completed tasks
+  const getCompletedBackgroundColor = (color: string) => {
+    // Convert hex to RGB and apply low opacity
+    if (color.startsWith('#')) {
+      const hex = color.substring(1);
+      const r = parseInt(hex.substring(0, 2), 16);
+      const g = parseInt(hex.substring(2, 4), 16);
+      const b = parseInt(hex.substring(4, 6), 16);
+      return `rgba(${r}, ${g}, ${b}, 0.1)`;
+    }
+    // Fallback for non-hex colors
+    return `${color}20`;
+  };
+
   return (
     <div 
-      className={`task-card ${isCompleted ? 'completed' : ''} ${isOverdue ? 'overdue' : ''}`}
+      className={`task-card ${isCompleted ? 'completed' : ''} ${isHovered ? 'hover-preview' : ''}`}
       style={{ 
         '--task-color': task.color,
         borderLeftColor: task.color 
@@ -88,29 +104,42 @@ export const TaskCard: React.FC<TaskCardProps> = ({
       <div className="task-header">
         <div className="task-info">
           <div className="task-title-row">
-            <h3 className="task-name">{task.name}</h3>
-            {/* Integrated Completion Circle */}
-            <div className="task-completion-integrated">
+            <h3 className={`task-name ${showUrgentStyling ? 'urgent' : ''}`}>{task.name}</h3>
+            {/* Integrated Completion Circle with Hover */}
+            <div 
+              className="task-completion-integrated"
+              onMouseEnter={() => setIsHovered(true)}
+              onMouseLeave={() => setIsHovered(false)}
+            >
               {onToggleCompletion ? (
                 <button
                   onClick={() => onToggleCompletion(task.id)}
-                  className={`completion-circle ${isCompleted ? 'completed' : ''}`}
+                  className={`completion-circle ${isCompleted ? 'completed' : ''} ${isHovered && !isCompleted ? 'hover-preview' : ''}`}
                   title={isCompleted ? 'Mark as pending' : 'Mark as completed'}
+                  style={{ 
+                    borderColor: isHovered && !isCompleted ? task.color : task.color,
+                    backgroundColor: isHovered && !isCompleted ? `${task.color}20` : isCompleted ? getCompletedBackgroundColor(task.color) : 'white'
+                  }}
                 >
-                  {isCompleted ? (
-                    <CheckCircle2 className="w-5 h-5" />
+                  {/* Show appropriate icon based on hover and completion state */}
+                  {isHovered && !isCompleted ? (
+                    <CheckCircle2 className="w-5 h-5" style={{ color: task.color }} />
+                  ) : isHovered && isCompleted ? (
+                    <Circle className="w-5 h-5" style={{ color: task.color }} />
+                  ) : isCompleted ? (
+                    <CheckCircle2 className="w-5 h-5" style={{ color: task.color }} />
                   ) : (
-                    <Circle className="w-5 h-5" />
+                    <Circle className="w-5 h-5" style={{ color: task.color }} />
                   )}
                 </button>
               ) : (
                 <div className="status-circle">
                   {isCompleted ? (
-                    <CheckCircle2 className="w-5 h-5 text-green-500" />
+                    <CheckCircle2 className="w-5 h-5" style={{ color: task.color }} />
                   ) : isOverdue ? (
-                    <AlertTriangle className="w-5 h-5 text-red-500" />
+                    <AlertTriangle className="w-5 h-5" style={{ color: '#dc2626' }} />
                   ) : (
-                    <Clock className="w-5 h-5 text-gray-400" />
+                    <Circle className="w-5 h-5" style={{ color: task.color }} />
                   )}
                 </div>
               )}
@@ -149,7 +178,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({
       <div className="task-details">
         <div className="task-due-date">
           <Calendar className="w-4 h-4" />
-          <span className={`due-date-text ${isDueToday ? 'due-today' : ''} ${isOverdue ? 'overdue' : ''}`}>
+          <span className={`due-date-text ${isOverdue ? 'overdue' : ''}`}>
             {formatDueDateTime(task.dueDate, task.dueTime)}
           </span>
         </div>
@@ -165,7 +194,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({
           padding: 20px;
           box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
           transition: all 0.2s ease;
-          height: 180px;
+          height: 200px;
           display: flex;
           flex-direction: column;
           justify-content: space-between;
@@ -178,6 +207,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({
           transform: translateY(-2px);
         }
 
+        /* Completed tasks styling */
         .task-card.completed {
           background: #f9fafb;
           opacity: 0.85;
@@ -188,9 +218,40 @@ export const TaskCard: React.FC<TaskCardProps> = ({
           color: #6b7280;
         }
 
-        .task-card.overdue {
-          border-left-color: #ef4444;
-          background: #fef2f2;
+        .task-card.completed .task-description {
+          text-decoration: line-through;
+          color: #9ca3af;
+        }
+
+        /* Hover preview effect */
+        .task-card.hover-preview {
+          background: #f9fafb;
+          transition: background-color 0.2s ease;
+        }
+
+        .task-card.hover-preview .task-name {
+          color: #6b7280;
+          text-decoration: line-through;
+          text-decoration-color: #9ca3af;
+          transition: all 0.2s ease;
+        }
+
+        .task-card.hover-preview .task-description {
+          color: #9ca3af;
+          text-decoration: line-through;
+          text-decoration-color: #d1d5db;
+          transition: all 0.2s ease;
+        }
+
+        /* Reverse effect for completed tasks */
+        .task-card.completed.hover-preview .task-name {
+          color: #1f2937;
+          text-decoration: none;
+        }
+
+        .task-card.completed.hover-preview .task-description {
+          color: #6b7280;
+          text-decoration: none;
         }
 
         /* Task Header */
@@ -224,6 +285,16 @@ export const TaskCard: React.FC<TaskCardProps> = ({
           white-space: nowrap;
           flex: 1;
           margin-right: 16px;
+          transition: all 0.2s ease;
+        }
+
+        .task-name.urgent {
+          color: #dc2626;
+        }
+
+        /* Hover preview should override urgent color */
+        .task-card.hover-preview .task-name.urgent {
+          color: #6b7280;
         }
 
         /* Integrated Completion Circle */
@@ -231,39 +302,23 @@ export const TaskCard: React.FC<TaskCardProps> = ({
           display: flex;
           align-items: center;
           flex-shrink: 0;
+          cursor: pointer;
         }
 
         .completion-circle {
           width: 32px;
           height: 32px;
-          border: 2px solid #e5e7eb;
+          border: 2px solid;
           border-radius: 50%;
-          background: white;
           cursor: pointer;
           display: flex;
           align-items: center;
           justify-content: center;
           transition: all 0.2s ease;
-          color: #9ca3af;
         }
 
         .completion-circle:hover {
-          border-color: #d1d5db;
-          background: #f9fafb;
           transform: scale(1.05);
-          color: #6b7280;
-        }
-
-        .completion-circle.completed {
-          border-color: #10b981;
-          background: #ecfdf5;
-          color: #059669;
-        }
-
-        .completion-circle.completed:hover {
-          border-color: #059669;
-          background: #d1fae5;
-          color: #047857;
         }
 
         .status-circle {
@@ -299,6 +354,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({
           -webkit-line-clamp: 2;
           -webkit-box-orient: vertical;
           white-space: normal;
+          transition: all 0.2s ease;
         }
 
         .task-actions {
@@ -343,74 +399,19 @@ export const TaskCard: React.FC<TaskCardProps> = ({
           display: flex;
           align-items: center;
           gap: 8px;
-          font-size: 14px;
           color: #6b7280;
+          font-size: 14px;
+          font-weight: 500;
         }
 
         .due-date-text {
-          font-weight: 500;
-        }
-
-        .due-date-text.due-today {
-          color: #f59e0b;
-          font-weight: 600;
-        }
-
-        .due-date-text.overdue {
-          color: #ef4444;
-          font-weight: 600;
-        }
-
-        .task-due-time {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          font-size: 13px;
+          transition: color 0.2s ease;
           color: #6b7280;
         }
 
-        .due-time-text {
-          font-weight: 500;
-        }
-
-        .habit-actions {
-          display: flex;
-          gap: 8px;
-          margin-left: 16px;
-        }
-
-        /* Mobile Responsive */
-        @media (max-width: 640px) {
-          .task-card {
-            height: auto;
-            min-height: 160px;
-          }
-
-          .task-name {
-            font-size: 16px;
-          }
-
-          .task-details {
-            gap: 6px;
-          }
-
-          .task-due-date {
-            font-size: 13px;
-          }
-
-          .task-details {
-            width: 100%;
-            flex-direction: row;
-            justify-content: space-between;
-            align-items: center;
-            padding-top: 12px;
-            border-top: 1px solid #f3f4f6;
-          }
-
-          .habit-actions {
-            margin-left: 0;
-            margin-top: 8px;
-          }
+        .due-date-text.overdue {
+          color: #dc2626;
+          font-weight: 600;
         }
       `}</style>
     </div>
