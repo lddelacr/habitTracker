@@ -2,7 +2,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { Habit } from '../types/habit';
 
 export const useApi = () => {
-  const { token, logout } = useAuth();
+  const { session, signOut } = useAuth();
   const API_BASE_URL = 'http://localhost:3001/api';
 
   const apiCall = async (endpoint: string, options: RequestInit = {}) => {
@@ -12,7 +12,7 @@ export const useApi = () => {
       ...options,
       headers: {
         'Content-Type': 'application/json',
-        ...(token && { Authorization: `Bearer ${token}` }),
+        ...(session?.access_token && { Authorization: `Bearer ${session.access_token}` }),
         ...options.headers,
       },
     };
@@ -22,7 +22,7 @@ export const useApi = () => {
       
       if (response.status === 401) {
         // Token expired or invalid
-        logout();
+        signOut();
         throw new Error('Session expired. Please log in again.');
       }
 
