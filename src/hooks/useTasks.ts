@@ -29,8 +29,18 @@ export const useTasks = () => {
       category: categoryId,
       color: taskRow.color,
       customColor: null,
+      
+      // NEW: Handle type field (default to 'task' for existing data)
+      type: (taskRow.type as 'task' | 'event') || 'task',
+      
       dueDate: taskRow.due_date,
       dueTime: taskRow.due_time || '09:00',
+      
+      // NEW: Handle event-specific fields
+      endTime: taskRow.end_time || undefined,
+      location: taskRow.location || undefined,
+      attendees: taskRow.attendees || undefined,
+      
       status: taskRow.status as 'pending' | 'completed' | 'overdue',
       createdDate: taskRow.created_date
     };
@@ -39,6 +49,12 @@ export const useTasks = () => {
     const categoryColor = getCategoryColor(categoryId);
     if (taskRow.color !== categoryColor) {
       task.customColor = taskRow.color;
+    }
+    
+    // NEW: Handle custom_color field from database
+    if (taskRow.custom_color) {
+      task.customColor = taskRow.custom_color;
+      task.color = taskRow.custom_color;
     }
 
     return task;
@@ -69,95 +85,72 @@ export const useTasks = () => {
       const convertedTasks = (tasksData || []).map(convertToTask);
       
       // CRITICAL: Only update overdue status during initial load
-      // Do NOT update status during regular operations
-      const today = getTodayString(); 
-      const updatedTasks = await Promise.all(convertedTasks.map(async (task) => {
-        // Only update status if it's clearly wrong (not during category updates)
-        let needsStatusUpdate = false;
-        let newStatus = task.status;
-        
-        // Only auto-update to overdue if task is pending and past due
-        if (task.status === 'pending' && task.dueDate < today) {
-          needsStatusUpdate = true;
-          newStatus = 'overdue';
-        }
-        
-        if (needsStatusUpdate) {
-          try {
-            await supabase
-              .from('tasks')
-              .update({ status: newStatus })
-              .eq('id', task.id)
-              .eq('user_id', user.id);
-            return { ...task, status: newStatus as const };
-          } catch (error) {
-            console.error('Failed to update task status:', error);
-          }
+      // Don't modify status for tasks that are completed
+      const today = getTodayString();
+      const tasksWithUpdatedStatus = convertedTasks.map(task => {
+        if (task.status !== 'completed' && task.dueDate < today) {
+          return { ...task, status: 'overdue' as const };
         }
         return task;
-      }));
+      });
 
-      setTasks(updatedTasks);
-    } catch (error) {
-      console.error('Failed to load tasks:', error);
-      setError(error instanceof Error ? error.message : 'Failed to load tasks');
+      setTasks(tasksWithUpdatedStatus);
+    } catch (err) {
+      console.error('Error loading tasks:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load tasks');
     } finally {
       setIsLoading(false);
     }
   }, [user, convertToTask]);
 
-  // Load tasks when user changes
   useEffect(() => {
     loadTasks();
   }, [loadTasks]);
 
   const addTask = useCallback(async (taskData: Omit<Task, 'id' | 'createdDate'>) => {
-    if (!user) throw new Error('User not authenticated');
+    if (!user) return;
 
     try {
+      const newTaskRow = {
+        user_id: user.id,
+        name: taskData.name,
+        description: taskData.description,
+        category: taskData.category,
+        color: taskData.color,
+        due_date: taskData.dueDate,
+        due_time: taskData.dueTime,
+        status: taskData.status,
+        created_date: getTodayString(),
+        
+        // NEW: Handle new fields
+        type: taskData.type || 'task',
+        end_time: taskData.endTime || null,
+        location: taskData.location || null,
+        attendees: taskData.attendees || null,
+        custom_color: taskData.customColor || null,
+      };
+
       const { data, error } = await supabase
         .from('tasks')
-        .insert({
-          user_id: user.id,
-          name: taskData.name,
-          description: taskData.description,
-          category: taskData.category,
-          color: taskData.color,
-          due_date: taskData.dueDate,
-          due_time: taskData.dueTime,
-          priority: 'medium', // Default value for database
-          status: taskData.status,
-          created_date: getTodayString()
-        })
+        .insert([newTaskRow])
         .select()
         .single();
 
-      if (error) {
-        throw error;
-      }
+      if (error) throw error;
 
       const newTask = convertToTask(data);
-      // Preserve custom color if provided
-      if (taskData.customColor) {
-        newTask.customColor = taskData.customColor;
-      }
       setTasks(prev => [newTask, ...prev]);
-    } catch (error) {
-      console.error('Failed to add task:', error);
-      setError(error instanceof Error ? error.message : 'Failed to add task');
-      throw error;
+    } catch (err) {
+      console.error('Error adding task:', err);
+      setError(err instanceof Error ? err.message : 'Failed to add task');
     }
   }, [user, convertToTask]);
 
   const updateTask = useCallback(async (id: string, updates: Partial<Task>) => {
-    if (!user) throw new Error('User not authenticated');
-
-    console.log('=== TASK UPDATE DEBUG ===');
-    console.log('Task ID:', id);
-    console.log('Updates received:', updates);
+    if (!user) return;
 
     try {
-      // Build update object with only the fields that are being updated
+      // Convert Task updates to database format
       const updateData: any = {};
       
       if (updates.name !== undefined) updateData.name = updates.name;
@@ -168,120 +161,76 @@ export const useTasks = () => {
       if (updates.dueTime !== undefined) updateData.due_time = updates.dueTime;
       if (updates.status !== undefined) updateData.status = updates.status;
       
-      // Always update the timestamp
-      updateData.updated_at = new Date().toISOString();
-      
-      const { error } = await supabase
+      // NEW: Handle new fields in updates
+      if (updates.type !== undefined) updateData.type = updates.type;
+      if (updates.endTime !== undefined) updateData.end_time = updates.endTime;
+      if (updates.location !== undefined) updateData.location = updates.location;
+      if (updates.attendees !== undefined) updateData.attendees = updates.attendees;
+      if (updates.customColor !== undefined) updateData.custom_color = updates.customColor;
+
+      const { data, error } = await supabase
         .from('tasks')
         .update(updateData)
         .eq('id', id)
-        .eq('user_id', user.id);
+        .eq('user_id', user.id)
+        .select()
+        .single();
 
-      if (error) {
-        console.error('=== DATABASE UPDATE ERROR ===');
-        console.error('Error:', error);
-        console.error('Update data that failed:', updateData);
-        throw error;
-      }
-      
+      if (error) throw error;
 
-      // Update local state
-      setTasks(prev => prev.map(task => {
-        if (task.id === id) {
-          const updatedTask = { ...task, ...updates };
-          
-          // Update color based on custom color or category
-          if (updates.customColor !== undefined) {
-            updatedTask.color = updates.customColor || getCategoryColor(updatedTask.category);
-            updatedTask.customColor = updates.customColor;
-          } else if (updates.category) {
-            // If only category changed, update color to match new category
-            if (!task.customColor) {
-              updatedTask.color = getCategoryColor(updates.category);
-            }
-          }
-          
-          return updatedTask;
-        }
-        return task;
-      }));
-    } catch (error) {
-      console.error('Failed to update task:', error);
-      setError(error instanceof Error ? error.message : 'Failed to update task');
-      throw error;
+      const updatedTask = convertToTask(data);
+      setTasks(prev => prev.map(task => task.id === id ? updatedTask : task));
+    } catch (err) {
+      console.error('Error updating task:', err);
+      setError(err instanceof Error ? err.message : 'Failed to update task');
     }
-  }, [user]);
+  }, [user, convertToTask]);
 
   const deleteTask = useCallback(async (id: string) => {
-    if (!user) throw new Error('User not authenticated');
+    if (!user) return;
 
     try {
-      // Optimistic update - remove from UI immediately
-      setTasks(prev => prev.filter(task => task.id !== id));
-
       const { error } = await supabase
         .from('tasks')
         .delete()
         .eq('id', id)
         .eq('user_id', user.id);
 
-      if (error) {
-        console.error('Database delete failed, reverting optimistic update:', error);
-        // Revert optimistic update on error
-        await loadTasks();
-        throw error;
-      }
-    } catch (error) {
-      console.error('Failed to delete task:', error);
-      setError(error instanceof Error ? error.message : 'Failed to delete task');
-      throw error;
+      if (error) throw error;
+
+      setTasks(prev => prev.filter(task => task.id !== id));
+    } catch (err) {
+      console.error('Error deleting task:', err);
+      setError(err instanceof Error ? err.message : 'Failed to delete task');
     }
-  }, [user, loadTasks]);
+  }, [user]);
 
   const toggleTaskCompletion = useCallback(async (id: string) => {
-    if (!user) throw new Error('User not authenticated');
-
-    const task = tasks.find(t => t.id === id);
-    if (!task) return;
-
-    // Determine the correct new status
-    let newStatus: 'pending' | 'completed' | 'overdue';
-    if (task.status === 'completed') {
-      // When uncompleting, check if it should be overdue
-      const today = getTodayString();
-      newStatus = task.dueDate < today ? 'overdue' : 'pending';
-    } else {
-      // When completing, always set to completed
-      newStatus = 'completed';
-    }
+    if (!user) return;
 
     try {
-      // Optimistic update - update UI immediately like habits do
-      setTasks(prev => prev.map(t => 
-        t.id === id ? { ...t, status: newStatus } : t
-      ));
+      const task = tasks.find(t => t.id === id);
+      if (!task) return;
 
-      // Update database in background
-      const { error } = await supabase
+      const newStatus = task.status === 'completed' ? 'pending' : 'completed';
+      
+      const { data, error } = await supabase
         .from('tasks')
-        .update({ 
-          status: newStatus,
-          updated_at: new Date().toISOString()
-        })
+        .update({ status: newStatus })
         .eq('id', id)
-        .eq('user_id', user.id);
+        .eq('user_id', user.id)
+        .select()
+        .single();
 
-      if (error) {
-        console.error('Database update failed, reverting optimistic update:', error);
-        // Revert optimistic update on error
-        await loadTasks();
-        throw error;
-      }
-    } catch (error) {
-      console.error('Failed to toggle task completion:', error);
-      setError(error instanceof Error ? error.message : 'Failed to update task');
+      if (error) throw error;
+
+      const updatedTask = convertToTask(data);
+      setTasks(prev => prev.map(t => t.id === id ? updatedTask : t));
+    } catch (err) {
+      console.error('Error toggling task completion:', err);
+      setError(err instanceof Error ? err.message : 'Failed to update task');
     }
-  }, [user, tasks, loadTasks]);
+  }, [user, tasks, convertToTask]);
 
   const getFilteredTasks = useCallback(() => {
     return tasks.filter(task => {
@@ -308,7 +257,6 @@ export const useTasks = () => {
       acc[task.category] = (acc[task.category] || 0) + 1;
       return acc;
     }, {} as Record<string, number>);
-
 
     return {
       totalTasks,

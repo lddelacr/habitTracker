@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Calendar, CheckCircle2, Target, Flame, Star, Edit3, Save, X, CheckSquare, Clock, AlertTriangle } from 'lucide-react';
+import { Calendar, CheckCircle2, Circle, Target, Flame, Star, Edit3, Save, X, CheckSquare, Clock, AlertTriangle } from 'lucide-react';
 import { Habit } from '../types/habit';
 import { Task } from '../types/task';
 import { getCompletionRate, getTodayString } from '../utils/dateUtils';
@@ -32,17 +32,27 @@ export const TodayView: React.FC<TodayViewProps> = ({
 }) => {
   const [activeNoteHabit, setActiveNoteHabit] = useState<string | null>(null);
   const [activeNoteTask, setActiveNoteTask] = useState<string | null>(null);
+  const [hoveredHabit, setHoveredHabit] = useState<string | null>(null);
+  const [hoveredTask, setHoveredTask] = useState<string | null>(null);
+  const [hoveredCompletedHabit, setHoveredCompletedHabit] = useState<string | null>(null);
+  const [hoveredCompletedTask, setHoveredCompletedTask] = useState<string | null>(null);
   const [noteText, setNoteText] = useState('');
   const [taskNoteText, setTaskNoteText] = useState('');
   const [dailyThoughtsText, setDailyThoughtsText] = useState('');
   const [isEditingThoughts, setIsEditingThoughts] = useState(false);
 
-  const completedToday = habits.filter(h => h.isCompletedToday).length;
+  // Split habits and tasks into completed and incomplete
+  const incompleteHabits = habits.filter(h => !h.isCompletedToday);
+  const completedHabits = habits.filter(h => h.isCompletedToday);
+  const incompleteTasks = tasks.filter(t => t.status !== 'completed');
+  const completedTasks = tasks.filter(t => t.status === 'completed');
+
+  const completedToday = completedHabits.length;
   const totalHabits = habits.length;
-  const completedTasks = tasks.filter(t => t.status === 'completed').length;
+  const completedTasksCount = completedTasks.length;
   const totalTasks = tasks.length;
   const completionRate = totalHabits > 0 ? Math.round((completedToday / totalHabits) * 100) : 0;
-  const taskCompletionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+  const taskCompletionRate = totalTasks > 0 ? Math.round((completedTasksCount / totalTasks) * 100) : 0;
   const today = getTodayString();
 
   const todayFormatted = new Date().toLocaleDateString('en-US', {
@@ -81,7 +91,7 @@ export const TodayView: React.FC<TodayViewProps> = ({
     return getTaskNote ? getTaskNote(taskId, getTodayString()).length > 0 : false;
   };
 
-  // Habit note handlers (existing)
+  // Habit note handlers
   const handleToggleNote = (habitId: string) => {
     if (activeNoteHabit === habitId) {
       setActiveNoteHabit(null);
@@ -106,7 +116,7 @@ export const TodayView: React.FC<TodayViewProps> = ({
     setNoteText('');
   };
 
-  // Daily thoughts handlers (existing)
+  // Daily thoughts handlers
   const handleEditThoughts = () => {
     setIsEditingThoughts(true);
     const existingThoughts = getDailyThoughts ? getDailyThoughts(getTodayString()) : '';
@@ -133,7 +143,6 @@ export const TodayView: React.FC<TodayViewProps> = ({
 
   // Countdown timer calculation
   const getCountdownText = (dueDate: string, dueTime: string) => {
-    // Don't show countdown for all-day tasks
     if (dueTime === '00:00') return null;
     
     const now = new Date();
@@ -145,7 +154,6 @@ export const TodayView: React.FC<TodayViewProps> = ({
     const diffMinutes = Math.floor(diffMs / (1000 * 60));
     
     if (diffMinutes < 0) {
-      // Overdue
       const overdueMins = Math.abs(diffMinutes);
       const overdueHours = Math.floor(overdueMins / 60);
       const remainingMins = overdueMins % 60;
@@ -156,7 +164,6 @@ export const TodayView: React.FC<TodayViewProps> = ({
         return `Overdue by ${overdueMins}m`;
       }
     } else {
-      // Due in future
       const hours = Math.floor(diffMinutes / 60);
       const mins = diffMinutes % 60;
       
@@ -167,31 +174,17 @@ export const TodayView: React.FC<TodayViewProps> = ({
       }
     }
   };
-  if (habits.length === 0 && tasks.length === 0) {
-    return (
-      <div className="text-center py-16">
-        <Calendar className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-        <h3 className="text-xl font-semibold text-gray-600 mb-2">No habits or tasks yet</h3>
-        <p className="text-gray-500 mb-6">Start building better habits and organizing your tasks!</p>
-      </div>
-    );
-  }
 
   const formatDueDateTime = (date: string, time?: string) => {
-    // Handle missing time (fallback)
     if (!time) return 'Due Today';
     
-    // Check if this is an all-day task (time is 00:00)
     const isAllDay = time === '00:00';
-    
-    // Parse date
     const [year, month, day] = date.split('-').map(Number);
     const dateObj = new Date(year, month - 1, day);
     
-    // For all-day tasks, show only the date without time
     if (isAllDay) {
       if (date === today) {
-        return null; // Don't show text for all-day tasks in Today view
+        return null;
       } else {
         return dateObj.toLocaleDateString('en-US', { 
           month: 'short', 
@@ -200,7 +193,6 @@ export const TodayView: React.FC<TodayViewProps> = ({
       }
     }
     
-    // For timed tasks, show date + time
     const [hours, minutes] = time.split(':').map(Number);
     const period = hours >= 12 ? 'PM' : 'AM';
     const displayHours = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
@@ -217,6 +209,16 @@ export const TodayView: React.FC<TodayViewProps> = ({
     }
   };
 
+  if (habits.length === 0 && tasks.length === 0) {
+    return (
+      <div className="text-center py-16">
+        <Calendar className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+        <h3 className="text-xl font-semibold text-gray-600 mb-2">No habits or tasks yet</h3>
+        <p className="text-gray-500 mb-6">Start building better habits and organizing your tasks!</p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -229,7 +231,7 @@ export const TodayView: React.FC<TodayViewProps> = ({
           <div className="text-right">
             <div className="flex items-center gap-2 mb-1">
               <CheckCircle2 className="w-5 h-5" />
-              <span className="text-2xl font-bold">{completedToday + completedTasks}/{totalHabits + totalTasks}</span>
+              <span className="text-2xl font-bold">{completedToday + completedTasksCount}/{totalHabits + totalTasks}</span>
             </div>
             <p className="text-blue-100 text-sm">Completed</p>
           </div>
@@ -269,8 +271,8 @@ export const TodayView: React.FC<TodayViewProps> = ({
         </div>
       </div>
 
-      {/* Today's Tasks - MOVED TO FIRST */}
-      {tasks.length > 0 && (
+      {/* Today's Tasks */}
+      {incompleteTasks.length > 0 && (
         <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
           <div className="flex items-center gap-3 mb-6">
             <div className="p-2 bg-blue-100 rounded-lg">
@@ -278,109 +280,103 @@ export const TodayView: React.FC<TodayViewProps> = ({
             </div>
             <div>
               <h2 className="text-xl font-semibold text-gray-800">Today's Tasks</h2>
-              <p className="text-sm text-gray-500">{completedTasks} of {totalTasks} completed</p>
+              <p className="text-sm text-gray-500">{completedTasksCount} of {totalTasks} completed</p>
             </div>
           </div>
 
           <div className="today-tasks-list">
-            {tasks.map((task) => {
+            {incompleteTasks.map((task) => {
               const category = getCategoryById(task.category);
               const isOverdue = task.status !== 'completed' && task.dueDate < today;
-              const isCompleted = task.status === 'completed';
               const countdownText = getCountdownText(task.dueDate, task.dueTime);
               
               return (
                 <div 
                   key={task.id} 
-                  className={`task-row ${isCompleted ? 'completed' : ''} ${isOverdue ? 'overdue' : ''}`}
-                  style={{ 
-                    '--task-color': task.color,
-                    borderLeftColor: task.color 
-                  } as React.CSSProperties}
+                  className={`task-row ${isOverdue ? 'overdue' : ''} ${hoveredTask === task.id ? 'hover-preview' : ''}`}
+                  style={{ '--task-color': category?.color || '#6b7280' }}
                 >
                   <div className="task-main-row">
                     <div className="task-main-content">
-                      <div className="task-checkbox-container">
-                        <input
-                          type="checkbox"
-                          id={`task-${task.id}`}
-                          className="task-checkbox"
-                          checked={isCompleted}
-                          onChange={() => onToggleTaskCompletion(task.id)}
-                          style={{ accentColor: task.color }}
-                        />
+                      <div 
+                        className="task-checkbox-container"
+                        onMouseEnter={() => setHoveredTask(task.id)}
+                        onMouseLeave={() => setHoveredTask(null)}
+                      >
+                        {hoveredTask === task.id ? (
+                          <CheckCircle2
+                            className="task-checkbox checked"
+                            style={{ color: category?.color || '#6b7280' }}
+                            onClick={() => onToggleTaskCompletion(task.id)}
+                          />
+                        ) : (
+                          <Circle
+                            className="task-checkbox"
+                            style={{ color: category?.color || '#6b7280' }}
+                            onClick={() => onToggleTaskCompletion(task.id)}
+                          />
+                        )}
                       </div>
                       
                       <div className="task-info">
-                        <label htmlFor={`task-${task.id}`} className="task-name">
-                          {task.name}
-                        </label>
-                        <span className="task-category">{category?.name || 'Uncategorized'}</span>
-                        {task.description && task.description.trim() && (
-                          <p className="task-description">{task.description}</p>
+                        <h3 className={`task-name ${hoveredTask === task.id ? 'hover-preview-text' : ''}`}>{task.name}</h3>
+                        <span className="task-category">
+                          {category?.name || 'Uncategorized'}
+                        </span>
+                        {task.description && (
+                          <p className={`task-description ${hoveredTask === task.id ? 'hover-preview-text' : ''}`}>{task.description}</p>
                         )}
                       </div>
                     </div>
                     
                     <div className="task-details">
-                      <div className="task-due-time">
-                        <Clock className="w-4 h-4" />
-                        {formatDueDateTime(task.dueDate, task.dueTime) && (
-                          <span className="due-time-text">
-                            {formatDueDateTime(task.dueDate, task.dueTime)}
-                          </span>
-                        )}
-                      </div>
+                      {task.priority && (
+                        <span className={`priority priority-${task.priority}`}>
+                          {task.priority.toUpperCase()}
+                        </span>
+                      )}
+                      
                       {countdownText && (
                         <div className={`task-countdown ${isOverdue ? 'overdue' : ''}`}>
-                          {isOverdue ? (
-                            <AlertTriangle className="w-3 h-3" />
-                          ) : (
-                            <Clock className="w-3 h-3" />
-                          )}
+                          <Clock className="w-3 h-3" />
                           <span className="countdown-text">{countdownText}</span>
                         </div>
                       )}
+                      
+                      {formatDueDateTime(task.dueDate, task.dueTime) && (
+                        <span className="task-due-time">
+                          {formatDueDateTime(task.dueDate, task.dueTime)}
+                        </span>
+                      )}
                     </div>
-
+                    
                     <div className="task-actions">
                       <button
                         onClick={() => handleToggleTaskNote(task.id)}
-                        className={`notes-btn ${hasTaskNote(task.id) ? 'has-note' : ''}`}
-                        style={{ 
-                          backgroundColor: hasTaskNote(task.id) ? task.color : undefined,
-                          color: hasTaskNote(task.id) ? 'white' : undefined
-                        }}
-                        title={hasTaskNote(task.id) ? 'Edit note' : 'Add note'}
+                        className={`note-btn ${hasTaskNote(task.id) || activeNoteTask === task.id ? 'has-note' : ''}`}
+                        title="Add note"
                       >
                         <Edit3 className="w-4 h-4" />
                       </button>
                     </div>
                   </div>
                   
-                  {/* Note Section */}
                   {activeNoteTask === task.id && (
                     <div className="task-note-section">
                       <textarea
                         value={taskNoteText}
                         onChange={(e) => setTaskNoteText(e.target.value)}
-                        placeholder="Add a note about this task today..."
+                        placeholder="Add a note for this task..."
                         className="task-note-input"
-                        autoFocus
+                        rows={3}
                       />
                       <div className="note-actions">
-                        <button
-                          onClick={() => handleSaveTaskNote(task.id)}
-                          className="save-note-btn"
-                        >
-                          <Save className="w-3 h-3 mr-1" />
+                        <button onClick={() => handleSaveTaskNote(task.id)} className="save-btn">
+                          <Save className="w-4 h-4" />
                           Save
                         </button>
-                        <button
-                          onClick={handleCancelTaskNote}
-                          className="cancel-note-btn"
-                        >
-                          <X className="w-3 h-3 mr-1" />
+                        <button onClick={handleCancelTaskNote} className="cancel-btn">
+                          <X className="w-4 h-4" />
                           Cancel
                         </button>
                       </div>
@@ -393,8 +389,8 @@ export const TodayView: React.FC<TodayViewProps> = ({
         </div>
       )}
 
-      {/* Today's Habits - MOVED TO SECOND */}
-      {habits.length > 0 && (
+      {/* Today's Habits */}
+      {incompleteHabits.length > 0 && (
         <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
           <div className="flex items-center gap-3 mb-6">
             <div className="p-2 bg-blue-100 rounded-lg">
@@ -407,97 +403,93 @@ export const TodayView: React.FC<TodayViewProps> = ({
           </div>
 
           <div className="today-habits-list">
-            {habits.map((habit) => {
+            {incompleteHabits.map((habit) => {
+              const category = getCategoryById(habit.category);
+              const habitColor = habit.color || category?.color || '#6b7280';
               const weeklyRate = getCompletionRate(habit, 'week');
               const monthlyRate = getCompletionRate(habit, 'month');
-              const category = getCategoryById(habit.category);
               
               return (
                 <div 
                   key={habit.id} 
-                  className={`habit-row ${habit.isCompletedToday ? 'completed' : ''}`}
-                  style={{ 
-                    '--habit-color': habit.color,
-                    borderLeftColor: habit.color 
-                  } as React.CSSProperties}
+                  className={`habit-row ${hoveredHabit === habit.id ? 'hover-preview' : ''}`}
+                  style={{ '--habit-color': habitColor }}
                 >
                   <div className="habit-main-row">
                     <div className="habit-main-content">
-                      <div className="habit-checkbox-container">
-                        <input
-                          type="checkbox"
-                          id={`habit-${habit.id}`}
-                          className="habit-checkbox"
-                          checked={habit.isCompletedToday}
-                          onChange={() => onToggleCompletion(habit.id)}
-                          style={{ accentColor: habit.color }}
-                        />
+                      <div 
+                        className="habit-checkbox-container"
+                        onMouseEnter={() => setHoveredHabit(habit.id)}
+                        onMouseLeave={() => setHoveredHabit(null)}
+                      >
+                        {hoveredHabit === habit.id ? (
+                          <CheckCircle2
+                            className="habit-checkbox checked"
+                            style={{ color: habitColor }}
+                            onClick={() => onToggleCompletion(habit.id)}
+                          />
+                        ) : (
+                          <Circle
+                            className="habit-checkbox"
+                            style={{ color: habitColor }}
+                            onClick={() => onToggleCompletion(habit.id)}
+                          />
+                        )}
                       </div>
                       
                       <div className="habit-info">
-                        <label htmlFor={`habit-${habit.id}`} className="habit-name">
-                          {habit.name}
-                        </label>
-                        <span className="habit-category">{category?.name || 'Uncategorized'}</span>
-                        {habit.description && habit.description.trim() && (
-                          <p className="habit-description">{habit.description}</p>
+                        <h3 className={`habit-name ${hoveredHabit === habit.id ? 'hover-preview-text' : ''}`}>{habit.name}</h3>
+                        <span className="habit-category">
+                          {category?.name || 'Uncategorized'}
+                        </span>
+                        {habit.description && (
+                          <p className={`habit-description ${hoveredHabit === habit.id ? 'hover-preview-text' : ''}`}>{habit.description}</p>
                         )}
                       </div>
                     </div>
                     
                     <div className="habit-stats">
-                      <div className={`stat-item ${habit.currentStreak >= 7 ? 'current-streak' : ''}`}>
+                      <div className="stat-item current-streak">
                         <span className="stat-value">{habit.currentStreak}</span>
-                        <span className="stat-label">Streak</span>
+                        <span className="stat-label">STREAK</span>
                       </div>
                       <div className="stat-item">
                         <span className="stat-value">{weeklyRate}%</span>
-                        <span className="stat-label">Week</span>
+                        <span className="stat-label">WEEK</span>
                       </div>
                       <div className="stat-item">
                         <span className="stat-value">{monthlyRate}%</span>
-                        <span className="stat-label">Month</span>
+                        <span className="stat-label">MONTH</span>
                       </div>
                     </div>
-                  
-                  <div className="habit-actions">
-                    <button
-                      onClick={() => handleToggleNote(habit.id)}
-                      className={`notes-btn ${hasNote(habit.id) ? 'has-note' : ''}`}
-                      style={{ 
-                        backgroundColor: hasNote(habit.id) ? habit.color : undefined,
-                        color: hasNote(habit.id) ? 'white' : undefined
-                      }}
-                      title={hasNote(habit.id) ? 'Edit note' : 'Add note'}
-                    >
-                      <Edit3 className="w-4 h-4" />
-                    </button>
+                    
+                    <div className="habit-actions">
+                      <button
+                        onClick={() => handleToggleNote(habit.id)}
+                        className={`note-btn ${hasNote(habit.id) || activeNoteHabit === habit.id ? 'has-note' : ''}`}
+                        title="Add note"
+                      >
+                        <Edit3 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
-                </div>
                   
-                  {/* Note Section */}
                   {activeNoteHabit === habit.id && (
-                    <div className="habit-note-section">
+                    <div className="note-input-section">
                       <textarea
                         value={noteText}
                         onChange={(e) => setNoteText(e.target.value)}
-                        placeholder="Add a note about this habit today..."
-                        className="habit-note-input"
-                        autoFocus
+                        placeholder="Add a note for this habit..."
+                        className="note-textarea"
+                        rows={3}
                       />
                       <div className="note-actions">
-                        <button
-                          onClick={() => handleSaveNote(habit.id)}
-                          className="save-note-btn"
-                        >
-                          <Save className="w-3 h-3 mr-1" />
+                        <button onClick={() => handleSaveNote(habit.id)} className="save-btn">
+                          <Save className="w-4 h-4" />
                           Save
                         </button>
-                        <button
-                          onClick={handleCancelNote}
-                          className="cancel-note-btn"
-                        >
-                          <X className="w-3 h-3 mr-1" />
+                        <button onClick={handleCancelNote} className="cancel-btn">
+                          <X className="w-4 h-4" />
                           Cancel
                         </button>
                       </div>
@@ -510,21 +502,250 @@ export const TodayView: React.FC<TodayViewProps> = ({
         </div>
       )}
 
-      {/* Daily Thoughts Section */}
-      <div className="daily-thoughts-section">
-        <div className="section-header">
-          <h3 className="section-title">Daily Thoughts</h3>
-          <span className="section-subtitle">How did today go overall?</span>
+      {/* Completed Section */}
+      {(completedHabits.length > 0 || completedTasks.length > 0) && (
+        <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-2 bg-green-100 rounded-lg">
+              <CheckCircle2 className="w-6 h-6 text-green-600" />
+            </div>
+            <div>
+              <h2 className="text-xl font-semibold text-gray-800">Completed</h2>
+              <p className="text-sm text-gray-500">
+                {completedHabits.length + completedTasks.length} item{completedHabits.length + completedTasks.length !== 1 ? 's' : ''} completed today
+              </p>
+            </div>
+          </div>
+
+          <div className="completed-list">
+            {/* Tasks Separator */}
+            {completedTasks.length > 0 && completedHabits.length > 0 && (
+              <div className="completed-separator">
+                <div className="separator-line"></div>
+                <span className="separator-label">Tasks</span>
+                <div className="separator-line"></div>
+              </div>
+            )}
+            
+            {/* Completed Tasks */}
+            {completedTasks.map((task) => {
+              const category = getCategoryById(task.category);
+              
+              return (
+                <div 
+                  key={task.id} 
+                  className={`task-row completed ${hoveredCompletedTask === task.id ? 'hover-preview' : ''}`}
+                  style={{ '--task-color': category?.color || '#6b7280' }}
+                >
+                  <div className="task-main-row">
+                    <div className="task-main-content">
+                      <div 
+                        className="task-checkbox-container"
+                        onMouseEnter={() => setHoveredCompletedTask(task.id)}
+                        onMouseLeave={() => setHoveredCompletedTask(null)}
+                      >
+                        {hoveredCompletedTask === task.id ? (
+                          <Circle
+                            className="task-checkbox"
+                            style={{ color: category?.color || '#6b7280' }}
+                            onClick={() => onToggleTaskCompletion(task.id)}
+                          />
+                        ) : (
+                          <CheckCircle2
+                            className="task-checkbox checked"
+                            style={{ color: category?.color || '#6b7280' }}
+                            onClick={() => onToggleTaskCompletion(task.id)}
+                          />
+                        )}
+                      </div>
+                      
+                      <div className="task-info">
+                        <h3 className={`task-name ${hoveredCompletedTask === task.id ? '' : 'completed-text'}`}>{task.name}</h3>
+                        <span className="task-category">
+                          {category?.name || 'Uncategorized'}
+                        </span>
+                        {task.description && (
+                          <p className={`task-description ${hoveredCompletedTask === task.id ? '' : 'completed-text'}`}>{task.description}</p>
+                        )}
+                      </div>
+                    </div>
+                    
+                    <div className="task-details">
+                      {task.priority && (
+                        <span className={`priority priority-${task.priority}`}>
+                          {task.priority.toUpperCase()}
+                        </span>
+                      )}
+                      
+                      {formatDueDateTime(task.dueDate, task.dueTime) && (
+                        <span className="task-due-time">
+                          {formatDueDateTime(task.dueDate, task.dueTime)}
+                        </span>
+                      )}
+                    </div>
+                    
+                    <div className="task-actions">
+                      <button
+                        onClick={() => handleToggleTaskNote(task.id)}
+                        className={`note-btn ${hasTaskNote(task.id) || activeNoteTask === task.id ? 'has-note' : ''}`}
+                        title="Add note"
+                      >
+                        <Edit3 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                  
+                  {activeNoteTask === task.id && (
+                    <div className="task-note-section">
+                      <textarea
+                        value={taskNoteText}
+                        onChange={(e) => setTaskNoteText(e.target.value)}
+                        placeholder="Add a note for this task..."
+                        className="task-note-input"
+                        rows={3}
+                      />
+                      <div className="note-actions">
+                        <button onClick={() => handleSaveTaskNote(task.id)} className="save-btn">
+                          <Save className="w-4 h-4" />
+                          Save
+                        </button>
+                        <button onClick={handleCancelTaskNote} className="cancel-btn">
+                          <X className="w-4 h-4" />
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            
+            {/* Separator between Tasks and Habits */}
+            {completedTasks.length > 0 && completedHabits.length > 0 && (
+              <div className="completed-separator">
+                <div className="separator-line"></div>
+                <span className="separator-label">Habits</span>
+                <div className="separator-line"></div>
+              </div>
+            )}
+            
+            {/* Completed Habits */}
+            {completedHabits.map((habit) => {
+              const category = getCategoryById(habit.category);
+              const habitColor = habit.color || category?.color || '#6b7280';
+              const weeklyRate = getCompletionRate(habit, 'week');
+              const monthlyRate = getCompletionRate(habit, 'month');
+              
+              return (
+                <div 
+                  key={habit.id} 
+                  className={`habit-row completed ${hoveredCompletedHabit === habit.id ? 'hover-preview' : ''}`}
+                  style={{ '--habit-color': habitColor }}
+                >
+                  <div className="habit-main-row">
+                    <div className="habit-main-content">
+                      <div 
+                        className="habit-checkbox-container"
+                        onMouseEnter={() => setHoveredCompletedHabit(habit.id)}
+                        onMouseLeave={() => setHoveredCompletedHabit(null)}
+                      >
+                        {hoveredCompletedHabit === habit.id ? (
+                          <Circle
+                            className="habit-checkbox"
+                            style={{ color: habitColor }}
+                            onClick={() => onToggleCompletion(habit.id)}
+                          />
+                        ) : (
+                          <CheckCircle2
+                            className="habit-checkbox checked"
+                            style={{ color: habitColor }}
+                            onClick={() => onToggleCompletion(habit.id)}
+                          />
+                        )}
+                      </div>
+                      
+                      <div className="habit-info">
+                        <h3 className={`habit-name ${hoveredCompletedHabit === habit.id ? '' : 'completed-text'}`}>{habit.name}</h3>
+                        <span className="habit-category">
+                          {category?.name || 'Uncategorized'}
+                        </span>
+                        {habit.description && (
+                          <p className={`habit-description ${hoveredCompletedHabit === habit.id ? '' : 'completed-text'}`}>{habit.description}</p>
+                        )}
+                      </div>
+                    </div>
+                    
+                    <div className="habit-stats">
+                      <div className="stat-item current-streak">
+                        <span className="stat-value">{habit.currentStreak}</span>
+                        <span className="stat-label">STREAK</span>
+                      </div>
+                      <div className="stat-item">
+                        <span className="stat-value">{weeklyRate}%</span>
+                        <span className="stat-label">WEEK</span>
+                      </div>
+                      <div className="stat-item">
+                        <span className="stat-value">{monthlyRate}%</span>
+                        <span className="stat-label">MONTH</span>
+                      </div>
+                    </div>
+                    
+                    <div className="habit-actions">
+                      <button
+                        onClick={() => handleToggleNote(habit.id)}
+                        className={`note-btn ${hasNote(habit.id) || activeNoteHabit === habit.id ? 'has-note' : ''}`}
+                        title="Add note"
+                      >
+                        <Edit3 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                  
+                  {activeNoteHabit === habit.id && (
+                    <div className="note-input-section">
+                      <textarea
+                        value={noteText}
+                        onChange={(e) => setNoteText(e.target.value)}
+                        placeholder="Add a note for this habit..."
+                        className="note-textarea"
+                        rows={3}
+                      />
+                      <div className="note-actions">
+                        <button onClick={() => handleSaveNote(habit.id)} className="save-btn">
+                          <Save className="w-4 h-4" />
+                          Save
+                        </button>
+                        <button onClick={handleCancelNote} className="cancel-btn">
+                          <X className="w-4 h-4" />
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
-        
+      )}
+
+      {/* Daily Thoughts */}
+      <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="p-2 bg-purple-100 rounded-lg">
+            <Edit3 className="w-6 h-6 text-purple-600" />
+          </div>
+          <h2 className="text-xl font-semibold text-gray-800">Daily Thoughts</h2>
+        </div>
+
         {isEditingThoughts ? (
-          <div className="thoughts-input-container">
+          <div className="thoughts-input-section">
             <textarea
               value={dailyThoughtsText}
               onChange={(e) => setDailyThoughtsText(e.target.value)}
-              placeholder="Reflect on your day, challenges, wins, or anything else..."
-              className="daily-thoughts-input"
-              autoFocus
+              placeholder="How was your day? What are you thinking about?"
+              className="thoughts-textarea"
+              rows={4}
             />
             <div className="thoughts-actions">
               <button onClick={handleSaveThoughts} className="save-thoughts-btn">
@@ -565,14 +786,14 @@ export const TodayView: React.FC<TodayViewProps> = ({
         <div className="bg-green-50 border border-green-200 rounded-xl p-6 text-center">
           <div className="text-4xl mb-2">🎉</div>
           <h3 className="text-lg font-semibold text-green-800 mb-1">Perfect day!</h3>
-          <p className="text-green-600">You've completed all your habits and tasks for today. Outstanding work!</p>
+          <p className="text-green-600">You've completed all your habits and tasks for today.</p>
         </div>
       )}
 
       {/* Styles */}
       <style jsx>{`
         /* TODAY TAB - IMPROVED LIST FORMAT */
-        .today-habits-list, .today-tasks-list {
+        .today-habits-list, .today-tasks-list, .completed-list {
           display: flex;
           flex-direction: column;
           gap: 12px;
@@ -588,7 +809,6 @@ export const TodayView: React.FC<TodayViewProps> = ({
           border-radius: 12px;
           margin-bottom: 0;
           transition: all 0.2s ease;
-          cursor: pointer;
           -webkit-tap-highlight-color: transparent;
           position: relative;
         }
@@ -611,7 +831,20 @@ export const TodayView: React.FC<TodayViewProps> = ({
           opacity: 0.85;
         }
 
-        .habit-row.completed .habit-name, .task-row.completed .task-name {
+        /* Hover Preview Styling */
+        .habit-row.hover-preview, .task-row.hover-preview {
+          background: #f9fafb;
+          transition: background-color 0.2s ease;
+        }
+
+        .hover-preview-text {
+          color: #6b7280;
+          text-decoration: line-through;
+          text-decoration-color: #9ca3af;
+          transition: all 0.2s ease;
+        }
+
+        .completed-text {
           color: #6b7280;
           text-decoration: line-through;
           text-decoration-color: #9ca3af;
@@ -633,6 +866,7 @@ export const TodayView: React.FC<TodayViewProps> = ({
           display: flex;
           align-items: center;
           justify-content: center;
+          cursor: pointer;
         }
 
         .habit-checkbox, .task-checkbox {
@@ -645,7 +879,15 @@ export const TodayView: React.FC<TodayViewProps> = ({
         }
 
         .habit-checkbox:hover, .task-checkbox:hover {
-          transform: scale(1.1);
+          transform: scale(1.05);
+        }
+
+        .habit-checkbox.checked, .task-checkbox.checked {
+          transform: scale(1.0);
+        }
+
+        .habit-checkbox.checked:hover, .task-checkbox.checked:hover {
+          transform: scale(1.05);
         }
 
         .habit-info, .task-info {
@@ -660,7 +902,6 @@ export const TodayView: React.FC<TodayViewProps> = ({
           font-size: 18px;
           font-weight: 600;
           color: #1f2937;
-          cursor: pointer;
           transition: color 0.2s ease;
           margin: 0;
           line-height: 1.3;
@@ -722,13 +963,8 @@ export const TodayView: React.FC<TodayViewProps> = ({
         }
 
         .stat-item.current-streak .stat-value {
-          color: var(--habit-color);
+          color: #6b7280;
           font-size: 16px;
-        }
-
-        .stat-item.current-streak::before {
-          content: '🔥 ';
-          font-size: 12px;
         }
 
         .task-details {
@@ -741,75 +977,89 @@ export const TodayView: React.FC<TodayViewProps> = ({
         }
 
         .task-due-time {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          font-size: 13px;
-          color: #6b7280;
-        }
-
-        .due-time-text {
-          font-weight: 500;
-        }
-
-        .task-priority {
-          display: flex;
-          align-items: center;
-          gap: 6px;
           font-size: 12px;
           color: #6b7280;
-        }
-
-        .priority-dot {
-          width: 8px;
-          height: 8px;
-          border-radius: 50%;
-        }
-
-        .priority-text {
           font-weight: 500;
-          text-transform: capitalize;
         }
 
-        .habit-actions {
+        .priority {
+          padding: 2px 8px;
+          border-radius: 12px;
+          font-size: 10px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+        }
+
+        .priority-low {
+          background: #dbeafe;
+          color: #1e40af;
+        }
+
+        .priority-medium {
+          background: #fef3c7;
+          color: #92400e;
+        }
+
+        .priority-high {
+          background: #fee2e2;
+          color: #991b1b;
+        }
+
+        .task-countdown {
           display: flex;
-          gap: 8px;
-          margin-left: 24px;
-          flex-shrink: 0;
+          align-items: center;
+          gap: 4px;
+          padding: 4px 8px;
+          background: #ecfdf5;
+          border-radius: 6px;
+          border: 1px solid #d1fae5;
         }
 
-        .task-actions {
+        .task-countdown.overdue {
+          color: #ef4444;
+          background: #fef2f2;
+          border-color: #fecaca;
+        }
+
+        .countdown-text {
+          font-size: 11px;
+          font-weight: 600;
+        }
+
+        .habit-actions, .task-actions {
           display: flex;
+          align-items: center;
           gap: 8px;
-          margin-left: 24px;
-          flex-shrink: 0;
         }
 
-        .notes-btn {
+        .note-btn {
           width: 32px;
           height: 32px;
-          border: none;
-          background: #f3f4f6;
+          border: 1px solid #e5e7eb;
           border-radius: 6px;
-          cursor: pointer;
+          background: white;
           display: flex;
           align-items: center;
           justify-content: center;
+          cursor: pointer;
           color: #6b7280;
           transition: all 0.2s ease;
         }
 
-        .notes-btn:hover {
-          background: #e5e7eb;
-          color: #374151;
+        .note-btn:hover {
+          border-color: #3b82f6;
+          color: #3b82f6;
         }
 
-        .notes-btn.has-note {
-          background: var(--habit-color);
-          color: white;
+        .note-btn.has-note {
+          background: #dbeafe;
+          border-color: #3b82f6;
+          color: #1e40af;
         }
 
-        .habit-note-section {
+        /* Task Note Section */
+        .task-note-section, .note-input-section {
           margin-top: 16px;
           padding: 16px;
           background: #f8fafc;
@@ -817,7 +1067,7 @@ export const TodayView: React.FC<TodayViewProps> = ({
           border: 1px solid #e5e7eb;
         }
 
-        .habit-note-input {
+        .task-note-input, .note-textarea {
           width: 100%;
           min-height: 60px;
           padding: 12px;
@@ -830,7 +1080,7 @@ export const TodayView: React.FC<TodayViewProps> = ({
           transition: border-color 0.2s ease;
         }
 
-        .habit-note-input:focus {
+        .task-note-input:focus, .note-textarea:focus {
           outline: none;
           border-color: #3b82f6;
           box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
@@ -839,100 +1089,75 @@ export const TodayView: React.FC<TodayViewProps> = ({
         .note-actions {
           display: flex;
           gap: 8px;
-          justify-content: flex-end;
         }
 
-        .save-note-btn, .cancel-note-btn {
+        .save-btn, .cancel-btn {
           display: flex;
           align-items: center;
+          gap: 4px;
           padding: 6px 12px;
-          border: none;
-          border-radius: 4px;
-          font-size: 12px;
+          border-radius: 6px;
+          font-size: 14px;
           font-weight: 500;
           cursor: pointer;
           transition: all 0.2s ease;
+          border: none;
         }
 
-        .save-note-btn {
+        .save-btn {
           background: #3b82f6;
           color: white;
         }
 
-        .save-note-btn:hover {
+        .save-btn:hover {
           background: #2563eb;
         }
 
-        .cancel-note-btn {
-          background: #e5e7eb;
+        .cancel-btn {
+          background: #f3f4f6;
           color: #374151;
         }
 
-        .cancel-note-btn:hover {
-          background: #d1d5db;
+        .cancel-btn:hover {
+          background: #e5e7eb;
         }
 
-        .daily-thoughts-section {
-          margin-top: 40px;
-          padding: 24px;
-          background: #ffffff;
-          border: 1px solid #e5e7eb;
-          border-radius: 12px;
-          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+        /* Daily Thoughts Styling */
+        .thoughts-input-section {
+          space-y: 12px;
         }
 
-        .section-header {
-          margin-bottom: 16px;
-        }
-
-        .section-title {
-          font-size: 18px;
-          font-weight: 600;
-          color: #1f2937;
-          margin: 0 0 4px 0;
-        }
-
-        .section-subtitle {
-          font-size: 14px;
-          color: #6b7280;
-        }
-
-        .daily-thoughts-input {
+        .thoughts-textarea {
           width: 100%;
-          min-height: 100px;
-          padding: 16px;
-          border: 2px solid #e5e7eb;
+          border: 1px solid #d1d5db;
           border-radius: 8px;
+          padding: 12px;
           font-size: 14px;
-          font-family: inherit;
-          line-height: 1.5;
           resize: vertical;
           margin-bottom: 12px;
-          transition: border-color 0.2s ease;
         }
 
-        .daily-thoughts-input:focus {
+        .thoughts-textarea:focus {
           outline: none;
           border-color: #3b82f6;
-          box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+          box-shadow: 0 0 0 3px rgb(59 130 246 / 0.1);
         }
 
         .thoughts-actions {
           display: flex;
           gap: 8px;
-          justify-content: flex-end;
         }
 
         .save-thoughts-btn, .cancel-thoughts-btn {
           display: flex;
           align-items: center;
           padding: 8px 16px;
-          border: none;
           border-radius: 6px;
           font-size: 14px;
           font-weight: 500;
           cursor: pointer;
           transition: all 0.2s ease;
+          border: none;
         }
 
         .save-thoughts-btn {
@@ -1014,57 +1239,28 @@ export const TodayView: React.FC<TodayViewProps> = ({
         .add-thoughts-btn:hover {
           background: #e5e7eb;
         }
-        /* Countdown Timer Styling */
-        .task-countdown {
+
+        /* Completed Section Separator */
+        .completed-separator {
           display: flex;
           align-items: center;
-          gap: 4px;
+          margin: 20px 0;
+          gap: 12px;
+        }
+
+        .separator-line {
+          flex: 1;
+          height: 1px;
+          background: #e5e7eb;
+        }
+
+        .separator-label {
           font-size: 12px;
-          color: #10b981;
-          font-weight: 500;
-          padding: 2px 6px;
-          background: #ecfdf5;
-          border-radius: 4px;
-          border: 1px solid #d1fae5;
-        }
-
-        .task-countdown.overdue {
-          color: #ef4444;
-          background: #fef2f2;
-          border-color: #fecaca;
-        }
-
-        .countdown-text {
-          font-size: 11px;
           font-weight: 600;
-        }
-
-        /* Task Note Section */
-        .task-note-section {
-          margin-top: 16px;
-          padding: 16px;
-          background: #f8fafc;
-          border-radius: 8px;
-          border: 1px solid #e5e7eb;
-        }
-
-        .task-note-input {
-          width: 100%;
-          min-height: 60px;
-          padding: 12px;
-          border: 1px solid #d1d5db;
-          border-radius: 6px;
-          font-size: 14px;
-          font-family: inherit;
-          resize: vertical;
-          margin-bottom: 12px;
-          transition: border-color 0.2s ease;
-        }
-
-        .task-note-input:focus {
-          outline: none;
-          border-color: #3b82f6;
-          box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+          color: #9ca3af;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+          padding: 0 4px;
         }
 
         /* Mobile Responsive */

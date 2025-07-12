@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Search, ChevronDown, ChevronUp } from 'lucide-react';
-import { TaskCard } from './TaskCard';
+import { TaskCard, isTaskEffectivelyCompleted } from './TaskCard';
 import { AddTaskModal } from './AddTaskModal';
 import { Task } from '../types/task';
 import { getTodayString } from '../utils/dateUtils';
@@ -11,14 +11,10 @@ interface TasksViewProps {
   selectedPriority: string;
   selectedStatus: string;
   onAddTask: (task: Omit<Task, 'id'>) => void;
-  onPriorityChange: (priority: string) => void;
-  onStatusChange: (status: string) => void;
   onUpdateTask: (id: string, updates: Partial<Task>) => void;
   onDeleteTask: (id: string) => void;
   onToggleCompletion: (id: string) => void;
 }
-
-type ViewMode = 'sections' | 'all-together';
 
 export const TasksView: React.FC<TasksViewProps> = ({
   tasks,
@@ -31,12 +27,10 @@ export const TasksView: React.FC<TasksViewProps> = ({
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [animatingTasks, setAnimatingTasks] = useState<Set<string>>(new Set());
-  const [hoveredTask, setHoveredTask] = useState<string | null>(null);
   
   // Section collapse/expand state
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
     pending: false,
-    overdue: false,
     completed: false
   });
 
@@ -102,33 +96,38 @@ export const TasksView: React.FC<TasksViewProps> = ({
     }
   };
 
+  // Updated task counts - use the new structure
   const getTaskCounts = () => {
     const total = tasks.length;
-    const completed = tasks.filter(t => t.status === 'completed').length;
-    const pending = tasks.filter(t => t.status === 'pending').length;
-    const overdue = tasks.filter(t => t.status === 'overdue').length;
+    const completed = tasks.filter(t => isTaskEffectivelyCompleted(t)).length;
+    const pending = tasks.filter(t => !isTaskEffectivelyCompleted(t)).length;
     
-    return { total, completed, pending, overdue };
+    return { total, completed, pending };
   };
 
   const counts = getTaskCounts();
 
-  // Organize tasks by sections
+  // Updated organize tasks by sections with overdue separation
   const organizeTasksBySections = () => {
-    // CRITICAL: Use task.status directly from database - NO recalculation
-    // This ensures tasks stay in their correct sections during category updates
     const pendingTasks = filteredTasks.filter(task => 
-      task.status === 'pending'
+      !isTaskEffectivelyCompleted(task)
     );
-    const overdueTasks = filteredTasks.filter(task => 
-      task.status === 'overdue'
+    
+    // Separate pending tasks into current and overdue
+    const today = getTodayString();
+    const currentTasks = pendingTasks.filter(task => 
+      task.status !== 'overdue' && task.dueDate >= today
     );
+    const overdueTasks = pendingTasks.filter(task => 
+      task.status === 'overdue' || (task.status !== 'completed' && task.dueDate < today)
+    );
+    
     const completedTasks = filteredTasks.filter(task => 
-      task.status === 'completed'
+      isTaskEffectivelyCompleted(task)
     );
 
     return {
-      pending: pendingTasks,
+      current: currentTasks,
       overdue: overdueTasks,
       completed: completedTasks
     };
@@ -141,20 +140,20 @@ export const TasksView: React.FC<TasksViewProps> = ({
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">My Tasks</h1>
-          <p className="text-gray-600">Manage your deadlines and to-dos</p>
+          <h1 className="text-2xl font-bold text-gray-800">Tasks & Events</h1>
+          <p className="text-gray-600">Manage your deadlines, to-dos, and schedule</p>
         </div>
         <button
           onClick={() => setIsModalOpen(true)}
           className="bg-blue-500 text-white px-6 py-3 rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-2 font-medium"
         >
           <Plus className="w-5 h-5" />
-          Add Task
+          Add Task or Event
         </button>
       </div>
 
       {/* Quick Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-3 gap-4">
         <div className="bg-white p-4 rounded-lg border border-gray-200">
           <div className="flex items-center gap-2 mb-1">
             <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
@@ -175,13 +174,6 @@ export const TasksView: React.FC<TasksViewProps> = ({
             <span className="text-sm font-medium text-gray-600">Pending</span>
           </div>
           <p className="text-2xl font-bold text-yellow-600">{counts.pending}</p>
-        </div>
-        <div className="bg-white p-4 rounded-lg border border-gray-200">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-sm">🔥</span>
-            <span className="text-sm font-medium text-gray-600">Needs Attention</span>
-          </div>
-          <p className="text-2xl font-bold text-orange-600">{counts.overdue}</p>
         </div>
       </div>
 
@@ -230,7 +222,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
             <div className="container-header" onClick={() => toggleSectionCollapse('pending')}>
               <div className="container-header-left">
                 <span className="container-emoji">⏳</span>
-                <h3 className="container-title">Pending ({sections.pending.length})</h3>
+                <h3 className="container-title">Pending ({sections.current.length + sections.overdue.length})</h3>
               </div>
               <button className="collapse-toggle" type="button">
                 {collapsedSections.pending ? (
@@ -240,15 +232,14 @@ export const TasksView: React.FC<TasksViewProps> = ({
                 )}
               </button>
             </div>
-            {!collapsedSections.pending && sections.pending.length > 0 && (
+            {!collapsedSections.pending && (sections.current.length > 0 || sections.overdue.length > 0) && (
               <div className="container-content">
                 <div className="tasks-grid-inside-container">
-                  {sections.pending.map((task) => (
+                  {/* Current/Future Tasks */}
+                  {sections.current.map((task) => (
                     <div
                       key={task.id}
-                      className={`task-card-wrapper ${animatingTasks.has(task.id) ? 'animating' : ''} ${hoveredTask === task.id ? 'hover-preview' : ''}`}
-                      onMouseEnter={() => setHoveredTask(task.id)}
-                      onMouseLeave={() => setHoveredTask(null)}
+                      className={`task-card-wrapper ${animatingTasks.has(task.id) ? 'animating' : ''}`}
                     >
                       <TaskCard
                         task={task}
@@ -256,39 +247,24 @@ export const TasksView: React.FC<TasksViewProps> = ({
                         onEdit={handleEditTask}
                         onDelete={handleDeleteTask}
                         showActions={true}
-                        isHovered={hoveredTask === task.id}
                       />
                     </div>
                   ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Needs Attention Container Card - Improved Language */}
-          <div className="container-card overdue-container">
-            <div className="container-header" onClick={() => toggleSectionCollapse('overdue')}>
-              <div className="container-header-left">
-                <span className="container-emoji">🔥</span>
-                <h3 className="container-title">Needs Attention ({sections.overdue.length})</h3>
-              </div>
-              <button className="collapse-toggle" type="button">
-                {collapsedSections.overdue ? (
-                  <ChevronDown className="w-4 h-4" />
-                ) : (
-                  <ChevronUp className="w-4 h-4" />
-                )}
-              </button>
-            </div>
-            {!collapsedSections.overdue && sections.overdue.length > 0 && (
-              <div className="container-content">
-                <div className="tasks-grid-inside-container">
+                  
+                  {/* Splitter - only show if we have both current and overdue tasks */}
+                  {sections.current.length > 0 && sections.overdue.length > 0 && (
+                    <div className="section-splitter">
+                      <div className="splitter-line"></div>
+                      <span className="splitter-text">Overdue</span>
+                      <div className="splitter-line"></div>
+                    </div>
+                  )}
+                  
+                  {/* Overdue Tasks */}
                   {sections.overdue.map((task) => (
                     <div
                       key={task.id}
-                      className={`task-card-wrapper ${animatingTasks.has(task.id) ? 'animating' : ''} ${hoveredTask === task.id ? 'hover-preview' : ''}`}
-                      onMouseEnter={() => setHoveredTask(task.id)}
-                      onMouseLeave={() => setHoveredTask(null)}
+                      className={`task-card-wrapper ${animatingTasks.has(task.id) ? 'animating' : ''}`}
                     >
                       <TaskCard
                         task={task}
@@ -296,9 +272,6 @@ export const TasksView: React.FC<TasksViewProps> = ({
                         onEdit={handleEditTask}
                         onDelete={handleDeleteTask}
                         showActions={true}
-                        isHovered={hoveredTask === task.id}
-                        isOverdue={true}
-                        showUrgentStyling={true}
                       />
                     </div>
                   ))}
@@ -328,9 +301,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
                   {sections.completed.map((task) => (
                     <div
                       key={task.id}
-                      className={`task-card-wrapper ${animatingTasks.has(task.id) ? 'animating' : ''} ${hoveredTask === task.id ? 'hover-preview' : ''}`}
-                      onMouseEnter={() => setHoveredTask(task.id)}
-                      onMouseLeave={() => setHoveredTask(null)}
+                      className={`task-card-wrapper ${animatingTasks.has(task.id) ? 'animating' : ''}`}
                     >
                       <TaskCard
                         task={task}
@@ -338,8 +309,6 @@ export const TasksView: React.FC<TasksViewProps> = ({
                         onEdit={handleEditTask}
                         onDelete={handleDeleteTask}
                         showActions={true}
-                        isHovered={hoveredTask === task.id}
-                        isCompleted={true}
                       />
                     </div>
                   ))}
@@ -365,89 +334,75 @@ export const TasksView: React.FC<TasksViewProps> = ({
         .card-container-sections {
           display: flex;
           flex-direction: column;
-          gap: 24px;
+          gap: 20px;
           padding: 20px 0;
         }
 
-        /* Container Cards - All White Background */
+        /* Container Cards - Consistent Neutral Styling */
         .container-card {
           background: #ffffff;
           border: 1px solid #e5e7eb;
-          border-radius: 16px;
-          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-          transition: all 0.3s ease;
+          border-radius: 12px;
+          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+          transition: all 0.2s ease;
           overflow: hidden;
         }
 
         .container-card:hover {
-          box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
-          transform: translateY(-1px);
+          box-shadow: 0 4px 8px rgba(0, 0, 0, 0.06);
         }
 
-        /* All containers use consistent white background */
+        /* All containers use same neutral background */
         .pending-container,
         .overdue-container,
         .completed-container {
-          background: #ffffff;
+          background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
         }
 
-        /* Completed Section Subtle Styling */
-        .completed-container {
-          opacity: 0.95;
-        }
-
-        .completed-container .task-card {
-          opacity: 0.92;
-        }
-
-        .completed-container .task-card:hover {
-          opacity: 1;
-        }
-
-        /* Enhanced Container Headers */
+        /* Enhanced Container Headers with Collapse/Expand */
         .container-header {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          padding: 18px 24px;
-          border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+          padding: 16px 20px;
+          border-bottom: 1px solid rgba(0, 0, 0, 0.05);
           cursor: pointer;
           transition: all 0.2s ease;
           user-select: none;
         }
 
         .container-header:hover {
-          background: rgba(255, 255, 255, 0.6);
+          background: rgba(255, 255, 255, 0.5);
         }
 
         .container-header-left {
           display: flex;
           align-items: center;
-          gap: 10px;
+          gap: 8px;
         }
 
         .container-emoji {
-          font-size: 18px;
+          font-size: 16px;
           line-height: 1;
         }
 
         .container-title {
-          font-size: 17px;
+          font-size: 16px;
           font-weight: 600;
           color: #1f2937;
           margin: 0;
-          line-height: 1.2;
+          line-height: 1;
         }
 
         .collapse-toggle {
           display: flex;
           align-items: center;
           justify-content: center;
-          width: 32px;
-          height: 32px;
+          width: 28px;
+          height: 28px;
           border: none;
           background: transparent;
-          border-radius: 8px;
+          border-radius: 6px;
           color: #6b7280;
           cursor: pointer;
           transition: all 0.2s ease;
@@ -455,149 +410,36 @@ export const TasksView: React.FC<TasksViewProps> = ({
         }
 
         .collapse-toggle:hover {
-          background: rgba(0, 0, 0, 0.06);
+          background: rgba(0, 0, 0, 0.05);
           color: #374151;
         }
 
-        /* Container Content - Enhanced Spacing */
+        /* Container Content - Proper Padding */
         .container-content {
-          padding: 24px;
-        }
-
-        /* Consistent Task Grid - Fixed Card Sizes */
-        .tasks-grid-inside-container {
-          display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-          gap: 16px;
-        }
-
-        /* Responsive Grid - Consistent Sizing */
-        @media (min-width: 640px) {
-          .tasks-grid-inside-container {
-            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-            gap: 20px;
-          }
-        }
-
-        @media (min-width: 1200px) {
-          .tasks-grid-inside-container {
-            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-            gap: 24px;
-          }
-        }
-
-        /* Task Card Wrapper - Enhanced Animations */
-        .task-card-wrapper {
-          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-
-        .task-card-wrapper.animating {
-          transform: scale(0.98);
-          opacity: 0.7;
-        }
-
-        /* Hover Preview Effect - Similar to TodayView */
-        .task-card-wrapper.hover-preview .task-card {
-          background: #f9fafb;
-          transition: background-color 0.2s ease;
-        }
-
-        .task-card-wrapper.hover-preview .task-name {
-          color: #6b7280;
-          text-decoration: line-through;
-          text-decoration-color: #9ca3af;
-          transition: all 0.2s ease;
-        }
-
-        .task-card-wrapper.hover-preview .task-description {
-          color: #6b7280;
-          text-decoration: line-through;
-          text-decoration-color: #9ca3af;
-          transition: all 0.2s ease;
-        }
-
-        /* Completed tasks reverse effect on hover */
-        .task-card-wrapper.hover-preview .task-card.completed-task .task-name {
-          color: #1f2937;
-          text-decoration: none;
-        }
-
-        .task-card-wrapper.hover-preview .task-card.completed-task .task-description {
-          color: #6b7280;
-          text-decoration: none;
-        }
-
-        /* Enhanced Card Interactions */
-        .container-card .task-card {
-          background: #ffffff;
-          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-          border: 1px solid #f1f5f9;
-          transition: all 0.3s ease;
-          border-radius: 12px;
           padding: 20px;
         }
 
-        .container-card .task-card:hover {
-          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-          transform: translateY(-2px);
-          border-color: #e2e8f0;
+        /* Task Grid Inside Containers */
+        .tasks-grid-inside-container {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+          gap: 16px;
+          width: 100%;
         }
 
-        /* TaskCard Content Styling */
-        .task-card .task-name {
-          font-size: 16px;
-          font-weight: 600;
-          color: #1f2937;
-          margin-bottom: 4px;
-          transition: all 0.2s ease;
+        /* Task Card Wrapper for Animation */
+        .task-card-wrapper {
+          transition: all 0.3s ease;
         }
 
-        .task-card .task-description {
-          font-size: 14px;
-          color: #6b7280;
-          margin-bottom: 8px;
-          transition: all 0.2s ease;
+        .task-card-wrapper.animating {
+          opacity: 0.7;
+          transform: scale(0.98);
         }
 
-        .task-card .task-category {
-          font-size: 12px;
-          color: #9ca3af;
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
-          font-weight: 500;
-        }
-
-        /* Overdue tasks - Only red due date, white card */
-        .task-card.overdue-task {
-          background: #ffffff;
-          border: 1px solid #f1f5f9;
-        }
-
-        .task-card.overdue-task .task-due-date {
-          color: #dc2626;
-          font-weight: 600;
-        }
-
-        /* Completed tasks styling */
-        .task-card.completed-task .task-name {
-          color: #6b7280;
-          text-decoration: line-through;
-          text-decoration-color: #9ca3af;
-        }
-
-        .task-card.completed-task .task-description {
-          color: #9ca3af;
-          text-decoration: line-through;
-          text-decoration-color: #d1d5db;
-        }
-
-        .task-card.completed-task {
-          opacity: 0.9;
-        }
-
-        /* Enhanced Animation Sequences */
+        /* Animation and Smooth Transitions */
         .container-card {
-          animation: container-fade-in 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+          animation: container-fade-in 0.5s ease-out;
         }
 
         .container-content {
@@ -607,7 +449,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
         @keyframes container-fade-in {
           from {
             opacity: 0;
-            transform: translateY(-12px);
+            transform: translateY(-10px);
           }
           to {
             opacity: 1;
@@ -618,7 +460,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
         @keyframes content-fade-in {
           from {
             opacity: 0;
-            transform: translateY(8px);
+            transform: translateY(10px);
           }
           to {
             opacity: 1;
@@ -628,10 +470,21 @@ export const TasksView: React.FC<TasksViewProps> = ({
 
         /* Subtle Hover Effects for Container Cards */
         .container-card:hover .container-header {
-          background: rgba(255, 255, 255, 0.6);
+          background: rgba(255, 255, 255, 0.5);
         }
 
         /* Visual Hierarchy - Task Cards Remain Prominent */
+        .container-card .task-card {
+          background: #ffffff;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+        }
+
+        .container-card .task-card:hover {
+          box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+          transform: translateY(-2px);
+        }
+
+        /* Ensure Proper Visual Nesting */
         .container-card {
           position: relative;
           z-index: 1;
@@ -642,18 +495,57 @@ export const TasksView: React.FC<TasksViewProps> = ({
           z-index: 2;
         }
 
-        /* Mobile Improvements */
-        @media (max-width: 640px) {
-          .container-content {
-            padding: 20px 16px;
-          }
-          
-          .container-header {
-            padding: 16px 20px;
-          }
-          
+        /* Completed Section Subtle Styling */
+        .completed-container {
+          opacity: 0.95;
+        }
+
+        .completed-container .task-card {
+          opacity: 0.9;
+        }
+
+        .completed-container .task-card:hover {
+          opacity: 1;
+        }
+
+        /* Section Splitter Styling */
+        .section-splitter {
+          grid-column: 1 / -1;
+          display: flex;
+          align-items: center;
+          margin: 24px 0;
+          gap: 16px;
+        }
+
+        .splitter-line {
+          flex: 1;
+          height: 1px;
+          background: linear-gradient(90deg, transparent, #f87171 20%, #f87171 80%, transparent);
+        }
+
+        .splitter-text {
+          font-size: 14px;
+          font-weight: 600;
+          color: #dc2626;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+          white-space: nowrap;
+          padding: 0 8px;
+        }
+
+        /* Mobile Responsive */
+        @media (max-width: 768px) {
           .tasks-grid-inside-container {
+            grid-template-columns: 1fr;
             gap: 12px;
+          }
+
+          .container-content {
+            padding: 16px;
+          }
+
+          .container-header {
+            padding: 12px 16px;
           }
         }
       `}</style>

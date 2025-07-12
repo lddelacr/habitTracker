@@ -151,18 +151,22 @@ const AppContent: React.FC = () => {
             onToggleCompletion={toggleTaskCompletion}
           />
         );
-      case 'calendar':
-        return (
-          <CalendarView
-            habits={habits}
-            onToggleCompletion={toggleHabitCompletion}
-            onToggleCompletionForDate={toggleHabitCompletionForDate}
-            getHabitNote={getHabitNote}
-            saveHabitNote={saveHabitNote}
-            getDailyThoughts={getDailyThoughts}
-            saveDailyThoughts={saveDailyThoughts}
-          />
-        );
+    case 'calendar':
+      return (
+        <CalendarView
+          habits={habits}
+          tasks={tasks} // Add this line
+          onToggleCompletion={toggleHabitCompletion}
+          onToggleCompletionForDate={toggleHabitCompletionForDate}
+          onToggleTaskCompletion={toggleTaskCompletion} // Add this line if you have it
+          getHabitNote={getHabitNote}
+          saveHabitNote={saveHabitNote}
+          getTaskNote={getTaskNote} // Add this line if you have it
+          saveTaskNote={saveTaskNote} // Add this line if you have it
+          getDailyThoughts={getDailyThoughts}
+          saveDailyThoughts={saveDailyThoughts}
+        />
+      );
       case 'stats':
         return (
           <StatisticsView
