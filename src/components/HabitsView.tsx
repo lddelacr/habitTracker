@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Plus, Filter, Search } from 'lucide-react';
 import { HabitCard } from './HabitCard';
 import { AddHabitModal } from './AddHabitModal';
+import { ConfirmationModal } from './ConfirmationModal'; // Add this import
 import { Habit } from '../types/habit';
 import { getAllCategories } from '../utils/categoryUtils';
 
@@ -27,6 +28,17 @@ export const HabitsView: React.FC<HabitsViewProps> = ({
   const [editingHabit, setEditingHabit] = useState<Habit | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   
+  // Add confirmation modal state
+  const [confirmationModal, setConfirmationModal] = useState<{
+    isOpen: boolean;
+    habitId: string | null;
+    habitName: string;
+  }>({
+    isOpen: false,
+    habitId: null,
+    habitName: ''
+  });
+  
   const categories = getAllCategories();
 
   const filteredHabits = habits
@@ -47,10 +59,36 @@ export const HabitsView: React.FC<HabitsViewProps> = ({
     setEditingHabit(null);
   };
 
+  // Updated handleDeleteHabit to use custom modal
   const handleDeleteHabit = (id: string) => {
-    if (window.confirm('Are you sure you want to delete this habit?')) {
-      onDeleteHabit(id);
+    const habit = habits.find(h => h.id === id);
+    if (habit) {
+      setConfirmationModal({
+        isOpen: true,
+        habitId: id,
+        habitName: habit.name
+      });
     }
+  };
+
+  // Handle confirmation modal actions
+  const handleConfirmDelete = () => {
+    if (confirmationModal.habitId) {
+      onDeleteHabit(confirmationModal.habitId);
+    }
+    setConfirmationModal({
+      isOpen: false,
+      habitId: null,
+      habitName: ''
+    });
+  };
+
+  const handleCancelDelete = () => {
+    setConfirmationModal({
+      isOpen: false,
+      habitId: null,
+      habitName: ''
+    });
   };
 
   return (
@@ -144,6 +182,18 @@ export const HabitsView: React.FC<HabitsViewProps> = ({
         onAdd={onAddHabit}
         onUpdate={onUpdateHabit}
         editingHabit={editingHabit}
+      />
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={confirmationModal.isOpen}
+        onClose={handleCancelDelete}
+        onConfirm={handleConfirmDelete}
+        title="Delete Habit"
+        message={`Are you sure you want to delete "${confirmationModal.habitName}"? This will permanently remove all completion data and cannot be undone.`}
+        confirmText="Delete Habit"
+        cancelText="Cancel"
+        variant="danger"
       />
     </div>
   );

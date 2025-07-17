@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Search, ChevronDown, ChevronUp } from 'lucide-react';
 import { TaskCard } from './TaskCard';
 import { AddTaskModal } from './AddTaskModal';
+import { ConfirmationModal } from './ConfirmationModal'; // Add this import
 import { Task } from '../types/task';
 import { getTodayString } from '../utils/dateUtils';
 
@@ -42,6 +43,17 @@ export const TasksView: React.FC<TasksViewProps> = ({
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [animatingTasks, setAnimatingTasks] = useState<Set<string>>(new Set());
+  
+  // Add confirmation modal state
+  const [confirmationModal, setConfirmationModal] = useState<{
+    isOpen: boolean;
+    taskId: string | null;
+    taskName: string;
+  }>({
+    isOpen: false,
+    taskId: null,
+    taskName: ''
+  });
   
   const handleAddTask = (taskData: Omit<Task, "id" | "createdDate">): void => {
     // Add the missing createdDate field
@@ -116,10 +128,36 @@ export const TasksView: React.FC<TasksViewProps> = ({
     setEditingTask(null);
   };
 
+  // Updated handleDeleteTask to use custom modal
   const handleDeleteTask = (id: string) => {
-    if (window.confirm('Are you sure you want to delete this task?')) {
-      onDeleteTask(id);
+    const task = tasks.find(t => t.id === id);
+    if (task) {
+      setConfirmationModal({
+        isOpen: true,
+        taskId: id,
+        taskName: task.name
+      });
     }
+  };
+
+  // Handle confirmation modal actions
+  const handleConfirmDelete = () => {
+    if (confirmationModal.taskId) {
+      onDeleteTask(confirmationModal.taskId);
+    }
+    setConfirmationModal({
+      isOpen: false,
+      taskId: null,
+      taskName: ''
+    });
+  };
+
+  const handleCancelDelete = () => {
+    setConfirmationModal({
+      isOpen: false,
+      taskId: null,
+      taskName: ''
+    });
   };
 
   // Updated task counts - use the new structure
@@ -352,6 +390,18 @@ export const TasksView: React.FC<TasksViewProps> = ({
         onAdd={handleAddTask}
         onUpdate={onUpdateTask}
         editingTask={editingTask}
+      />
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={confirmationModal.isOpen}
+        onClose={handleCancelDelete}
+        onConfirm={handleConfirmDelete}
+        title="Delete Task"
+        message={`Are you sure you want to delete "${confirmationModal.taskName}"? This action cannot be undone.`}
+        confirmText="Delete Task"
+        cancelText="Cancel"
+        variant="danger"
       />
 
       {/* Custom Styles */}
